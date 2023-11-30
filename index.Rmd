@@ -1,0 +1,114 @@
+---
+title: "Final Fate Tracking Project"
+author: "Avery Coble"
+date: "2023-11-16"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+#libraries
+library(tidyverse)
+library(readxl)
+library(kableExtra)
+library(rcartocolor)
+library(patchwork)
+
+#import data
+raw.data <- read_xlsx("ArcGIS_FinalData.xlsx", sheet = "FateTracking")%>%
+  filter(Processed == "Y")
+```
+
+# Data Used {.tabset}
+## How the raw data was wrangled
+```{r}
+kable(head(raw.data))%>%
+  kable_styling(bootstrap_options = "striped")
+```
+*This table is the first 10 rows of the raw data used in this project. It was full of zeros that represented unanalyzed data, as well as columns that belonged in metadata.*
+
+```{r}
+percentages <- raw.data %>%
+  select("Tag #",
+         "Actual_Date",
+         "Total Coral Area Sum (cm2)",
+         "Live Tissue Sum (cm2)",
+         "New SCTLD Mortality Sum (cm2)",
+         "Treatment Used (mL/cc)")%>%
+  rename("Date" = "Actual_Date",
+         "Tag" = "Tag #",
+         "Total_Coral_Area" = "Total Coral Area Sum (cm2)",
+         "Live_Tissue" = "Live Tissue Sum (cm2)",
+         "New_SCTLD_Mortality" = "New SCTLD Mortality Sum (cm2)",
+         "Treatment" = "Treatment Used (mL/cc)")%>%
+  na.omit()%>%
+  mutate(Date = mdy(Date),
+         Percent_Live = Live_Tissue / Total_Coral_Area,
+         Percent_NewMort = New_SCTLD_Mortality / Total_Coral_Area,
+         Tag = as.factor(Tag))
+
+kable(head(percentages))%>%
+  kable_styling(bootstrap_options = "striped")
+```
+*This table was created to analyze the rate of change in each colonies live tissue and active mortality over time.*
+
+```{r}
+counts <- raw.data %>%
+  select("Tag #", 
+         "Actual_Date",
+         "# New Lesions (count)",
+         "# Total Active Lesions (count)",
+         "Halted Lesions (count)",
+         "Treatment Used (mL/cc)")%>%
+  rename("Date" = "Actual_Date",
+         "Tag" = "Tag #",
+         "New_Lesions" = "# New Lesions (count)",
+         "Total_Active_Lesions" = "# Total Active Lesions (count)",
+         "Halted_Lesions" = "Halted Lesions (count)",
+         "Treatment_Used" = "Treatment Used (mL/cc)")%>%
+  na.omit()%>%
+  mutate(Date = mdy(Date),
+         Tag = as.factor(Tag))
+
+kable(head(counts))%>%
+  kable_styling(bootstrap_options = "striped")
+```
+*This table was created to show the changes in number of active and halted diseased lesion on each colony over time.*
+
+
+# Visualization {.tabset}
+## Graph showing live tissue and new mortality 
+```{r}
+Colony_Tag_Number <- hcl.colors(10, palette = "Roma", alpha = NULL)
+
+plots <- function(data, x, y, z){
+  p <- ggplot(data, aes({{x}},{{y}}, color = {{z}})) +
+    geom_point() + 
+    geom_line() +
+    scale_color_carto_d("Colony_Tag_Number")
+  
+  return(p)
+}
+
+LiveT <- plots(percentages, Date, Percent_Live, Tag)
+
+NewM <- plots(percentages, Date, Percent_NewMort, Tag)
+
+NewL <- plots(counts, Date, New_Lesions, Tag)
+
+ActiveL <- plots(counts, Date, Total_Active_Lesions, Tag)
+
+HaltedL <- plots(counts, Date, Halted_Lesions, Tag)
+
+Treatment <- plots(percentages, Date, Treatment, Tag)
+
+tissue <- LiveT + NewM + Treatment + plot_layout(guides = "collect")
+tissue 
+```
+
+# Visualization {.tabset}
+## Graph showing live tissue and new mortality
+```{r, results='asis'}
+lesions <- ActiveL + HaltedL + Treatment + plot_layout(guides = "collect")
+print(lesions)
